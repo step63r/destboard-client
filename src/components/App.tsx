@@ -9,10 +9,16 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
+  Tooltip,
   Typography,
   Paper
 } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import ClearIcon from '@mui/icons-material/Clear';
 import CircleIcon from '@mui/icons-material/Circle';
+import EditIcon from '@mui/icons-material/Edit';
+
 
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 
@@ -23,26 +29,68 @@ import "./App.css";
 const App: React.FC = () => {
   const [table, setTable] = useState<DestBoardCell[][]>([]);
   const [inProgress, setInProgress] = useState<boolean>(false);
+  const [date, setDate] = useState<Date>(new Date());
+  const [isEdit, setIsEdit] = useState<boolean>(false);
+  const [editCell, setEditCell] = useState<DestBoardCell>({ name: '', status: '', present: false });
+  const [editCellPos, setEditCellPos] = useState<[number, number]>([-1, -1]);
 
   /**
    * componentDidMountに相当
    */
   useEffect(() => {
     updateTable();
+    setDate(new Date());
   }, []);
-
-  /**
-   * テーブルの行列を反転する
-   * @param src テーブル
-   * @returns 行列を反転したテーブル
-   */
-  const transpose = (src: DestBoardCell[][]): DestBoardCell[][] => {
-    return src[0].map((_, c) => src.map(r => r[c]));
-  };
 
   const handleTogglePresent = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>, row: number, col: number) => {
     e.preventDefault();
     postRequest(row, col, undefined, undefined, !table[col][row].present);
+  };
+
+  /**
+   * 行先編集ボタンのイベントハンドラ
+   * @param e 
+   * @param row 
+   * @param col 
+   */
+  const handleEditButton = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>, row: number, col: number) => {
+    e.preventDefault();
+    setEditCell({ ...table[col][row] });
+    setEditCellPos([row, col]);
+    setIsEdit(true);
+  };
+
+  /**
+   * 行先が編集されたときのイベントハンドラ
+   * @param e 
+   */
+  const handleChangeStatus = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditCell({ ...editCell, status: e.target.value });
+  };
+
+  /**
+   * 行先更新ボタンのイベントハンドラ
+   * @param e 
+   * @param row 
+   * @param col 
+   */
+  const handleSubmitUpdateStatusButton = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>, row: number, col: number) => {
+    e.preventDefault();
+    postRequest(row, col, undefined, editCell.status, undefined);
+    setEditCell({ name: '', status: '', present: false });
+    setEditCellPos([-1, -1]);
+    setIsEdit(false);
+  };
+
+  /**
+   * 行先編集キャンセルボタンのイベントハンドラ
+   * @param e 
+   */
+  const handleCancelUpdateStatusButton = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    e.preventDefault();
+    setEditCell({ name: '', status: '', present: false });
+    setEditCellPos([-1, -1]);
+    setIsEdit(false);
   };
 
   /**
@@ -60,6 +108,7 @@ const App: React.FC = () => {
           console.log('update table success!');
           console.log(res.data);
           setTable(res.data);
+          setDate(new Date());
         }
       })
       .catch((e: AxiosError<{ error: string }>) => {
@@ -71,7 +120,7 @@ const App: React.FC = () => {
   /**
    * テーブル情報の更新
    * @param row 行番号
-   * @param col 列番頭
+   * @param col 列番号
    * @param name 名前（更新しない場合は undefined を渡す）
    * @param status 行先（更新しない場合は undefined を渡す）
    * @param present 在席状態（更新しない場合は undefined を渡す）
@@ -90,7 +139,7 @@ const App: React.FC = () => {
     };
 
     axios(options)
-      .then((res: AxiosResponse<any>) => {
+      .then((_: AxiosResponse<any>) => {
         console.log('post success!');
         updateTable();
       })
@@ -110,23 +159,25 @@ const App: React.FC = () => {
           行先表示板
         </Typography>
         <Typography variant='h6' component='div' gutterBottom>
-          最終更新：{new Date().toLocaleString()}
+          最終更新：{date.toLocaleString()}
         </Typography>
 
         <Stack direction='row' spacing={2}>
           {table.map((col, idx) => (
-            <TableContainer component={Paper}>
+            <TableContainer key={idx} component={Paper}>
               <Table sx={{ minWidth: 300 }}>
                 <colgroup>
                   <col style={{ width: 'auto' }} />
                   <col style={{ width: '20%' }} />
                   <col style={{ width: '80%' }} />
+                  <col style={{ width: 'auto' }} />
                 </colgroup>
                 <TableHead>
                   <TableRow>
                     <TableCell></TableCell>
                     <TableCell>名前</TableCell>
                     <TableCell>行先</TableCell>
+                    <TableCell></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -138,7 +189,34 @@ const App: React.FC = () => {
                         </IconButton>
                       </TableCell>
                       <TableCell>{row.name}</TableCell>
-                      <TableCell>{row.status}</TableCell>
+                      <TableCell>
+                        {isEdit && editCellPos[0] === idx2 && editCellPos[1] === idx
+                          ? (
+                            <Stack direction='row'>
+                              <TextField variant='standard' value={editCell.status} onChange={handleChangeStatus} hiddenLabel fullWidth />
+                              <Tooltip title="更新">
+                                <IconButton onClick={(e) => handleSubmitUpdateStatusButton(e, idx2, idx)}>
+                                  <CheckIcon />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="キャンセル">
+                                <IconButton onClick={handleCancelUpdateStatusButton}>
+                                  <ClearIcon />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          )
+                          : `${row.status}`}
+                      </TableCell>
+                      <TableCell>
+                        {!isEdit && (
+                          <Tooltip title="行先を編集">
+                            <IconButton onClick={(e) => handleEditButton(e, idx2, idx)}>
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -152,7 +230,6 @@ const App: React.FC = () => {
           <CircularProgress />
         </div>
       )}
-      
     </>
   );
 }
